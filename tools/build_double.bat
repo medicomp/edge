@@ -9,6 +9,8 @@ if "%1" equ "" (
 mkdir "%SELF%\build\nuget\content\edge" > nul 2>&1
 mkdir "%SELF%\build\nuget\lib\net40" > nul 2>&1
 mkdir "%SELF%\build\nuget\lib\netstandard1.5" > nul 2>&1
+mkdir "%SELF%\build\nuget\runtimes\win7-x86\native" > nul 2>&1
+mkdir "%SELF%\build\nuget\runtimes\win7-x64\native" > nul 2>&1
 mkdir "%SELF%\build\nuget\tools" > nul 2>&1
 mkdir "%SELF%\..\src\double\Edge.js\bin\Release\net40" > nul 2>&1
 
@@ -90,10 +92,13 @@ pushd "%SELF%\.."
 
 "%NODEEXE%" "%GYP%" configure --msvs_version=2013
 "%SELF%\build\repl.exe" ./build/edge_nativeclr.vcxproj "%USERPROFILE%\.node-gyp\%1\$(Configuration)\node.lib" "%SELF%\build\node-%1-%2\node.lib"
+"%SELF%\build\repl.exe" ./build/edge_coreclr.vcxproj "%USERPROFILE%\.node-gyp\%1\$(Configuration)\node.lib" "%SELF%\build\node-%1-%2\node.lib"
 "%NODEEXE%" "%GYP%" build
 mkdir "%SELF%\build\nuget\content\edge\%2" > nul 2>&1
 copy /y build\release\edge_nativeclr.node "%SELF%\build\nuget\content\edge\%2"
 copy /y "%SELF%\build\node-%1-%2\node.dll" "%SELF%\build\nuget\content\edge\%2"
+copy /y build\release\edge_coreclr.node "%SELF%\build\nuget\runtimes\win7-%2\native"
+copy /y "%SELF%\build\node-%1-%2\node.dll" "%SELF%\build\nuget\runtimes\win7-%2\native"
 
 popd
 
@@ -108,8 +113,25 @@ if exist "%SELF%\build\node-%1-%2\node.lib" exit /b 0
 pushd "%SELF%\build\node-%1"
 
 ..\repl.exe node.gyp "'executable'" "'shared_library'"
+
 if %ERRORLEVEL% neq 0 (
     echo Cannot update node.gyp 
+    popd
+    exit /b -1
+)
+
+..\repl.exe ./src/node.cc "int Start(int argc, char** argv) {" "extern ""C"" int Start(int argc, char** argv) {"
+
+if %ERRORLEVEL% neq 0 (
+    echo Cannot update node.cc 
+    popd
+    exit /b -1
+)
+
+..\repl.exe ./src/node.h "NODE_EXTERN int Start(int argc, char *argv[]);" "extern ""C"" NODE_EXTERN int Start(int argc, char *argv[]);"
+
+if %ERRORLEVEL% neq 0 (
+    echo Cannot update node.cc 
     popd
     exit /b -1
 )

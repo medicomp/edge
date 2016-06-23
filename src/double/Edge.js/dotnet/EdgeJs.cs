@@ -6,6 +6,10 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+#if NETSTANDARD1_5
+using System.Linq;
+using Microsoft.Extensions.DependencyModel;
+#endif
 
 namespace EdgeJs
 {
@@ -24,11 +28,17 @@ namespace EdgeJs
                 if (assemblyDirectory == null)
                 {
                     assemblyDirectory = Environment.GetEnvironmentVariable("EDGE_BASE_DIR");
-                    if (string.IsNullOrEmpty(assemblyDirectory))
+
+                    if (String.IsNullOrEmpty(assemblyDirectory))
                     {
+#if NETSTANDARD1_5
+                        string codeBase = typeof(Edge).GetTypeInfo().Assembly.CodeBase;
+#else
                         string codeBase = typeof(Edge).Assembly.CodeBase;
+#endif
                         UriBuilder uri = new UriBuilder(codeBase);
                         string path = Uri.UnescapeDataString(uri.Path);
+
                         assemblyDirectory = Path.GetDirectoryName(path);
                     }
                 }
@@ -44,15 +54,17 @@ namespace EdgeJs
             initialized = true;
             waitHandle.Set();
 
-            return Task<object>.FromResult((object)null);
+            return Task.FromResult((object)null);
         }
 
         // Find the entry point with `dumpbin /exports node.exe`, look for Start@node
-        [DllImport("node.dll", EntryPoint = "#925", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("node", EntryPoint = "Start", CallingConvention = CallingConvention.Cdecl)]
         static extern int NodeStart(int argc, string[] argv);
 
+#if !NETSTANDARD1_5
         [DllImport("kernel32.dll", EntryPoint = "LoadLibrary")]
         static extern int LoadLibrary([MarshalAs(UnmanagedType.LPStr)] string lpLibFileName);
+#endif
 
         public static Func<object,Task<object>> Func(string code)
         {
@@ -62,6 +74,18 @@ namespace EdgeJs
                 {
                     if (!initialized)
                     {
+                        string[] nodeParams = String.IsNullOrEmpty(Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS"))
+                            ? new string[0]
+                            : Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS").Split(' ');
+
+#if NETSTANDARD1_5
+                        Environment.SetEnvironmentVariable("EDGE_USE_CORECLR", "1");
+                        Environment.SetEnvironmentVariable("EDGE_APP_ROOT", AppContext.BaseDirectory);
+
+                        string nativeLibraryPath = Path.Combine(AssemblyDirectory, "..", "..", DependencyContext.Default.RuntimeLibraries.Single(l => l.Name == "Edge.js").NativeLibraryGroups[0].AssetPaths[0].Replace('/', Path.DirectorySeparatorChar));
+                        
+                        Environment.SetEnvironmentVariable("EDGE_NATIVE_LIBRARIES_PATH", Path.GetDirectoryName(nativeLibraryPath));
+#else
                         if (IntPtr.Size == 4)
                         {
                             LoadLibrary(AssemblyDirectory + @"\edge\x86\node.dll");
@@ -75,20 +99,19 @@ namespace EdgeJs
                             throw new InvalidOperationException(
                                 "Unsupported architecture. Only x86 and x64 are supported.");
                         }
+#endif
 
                         Thread v8Thread = new Thread(() => 
                         {
                             List<string> argv = new List<string>();
                             argv.Add("node");
-                            string node_params = Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS");
-                            if (!string.IsNullOrEmpty(node_params))
+
+                            foreach (string param in nodeParams)
                             {
-                                foreach (string p in node_params.Split(' '))
-                                {
-                                    argv.Add(p);
-                                }
+                                argv.Add(param);
                             }
-                            argv.Add(AssemblyDirectory + "\\edge\\double_edge.js");
+
+                            argv.Add(Path.Combine(AssemblyDirectory, "..", "..", "content", "edge", "double_edge.js"));
                             NodeStart(argv.Count, argv.ToArray());
                             waitHandle.Set();
                         });
@@ -110,8 +133,9 @@ namespace EdgeJs
                 throw new InvalidOperationException("Edge.Func cannot be used after Edge.Close had been called.");
             }
 
-            var task = compileFunc(code);
+            Task<object> task = compileFunc(code);
             task.Wait();
+
             return (Func<object, Task<object>>)task.Result;
         }
     }

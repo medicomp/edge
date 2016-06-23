@@ -1,0 +1,32 @@
+{
+  "frameworks": {
+    "netstandard1.5": {
+      "imports": [
+        "portable-dnxcore50+net45+win8+wp8+wpa81",
+        "dotnet",
+        "portable-net45+win8"
+      ],
+
+      "dependencies": {
+        "NETStandard.Library": "1.5.0-rc2-24027",
+        "System.Console": "4.0.0-rc2-24027",
+        "nunit": "3.2.1",
+        "dotnet-test-nunit": "3.3.0.60-CI"
+      }
+    }
+  },
+
+  "dependencies": {
+    "Edge.js": {
+      "target": "package",
+      "version": "5.9.1-rc2"
+    }
+  },
+
+  "testRunner": "nunit",
+
+  "runtimes": {
+    "win7-x64": { },
+    "ubuntu.14.04-x64": { } 
+  }
+}
