@@ -110,6 +110,7 @@ class CoreClrEmbedding
         static CoreClrGcHandle GetClrFuncReflectionWrapFunc(const char* assemblyFile, const char* typeName, const char* methodName, v8::Local<v8::Value>* exception);
         static void CallClrFunc(CoreClrGcHandle functionHandle, void* payload, int payloadType, int* taskState, void** result, int* resultType);
         static HRESULT Initialize(BOOL debugMode);
+		static HRESULT InitializeAlreadyRunning(BOOL debugMode);
         static void ContinueTask(CoreClrGcHandle taskHandle, void* context, TaskCompleteFunction callback, void** exception);
         static void FreeHandle(CoreClrGcHandle handle);
         static void FreeMarshalData(void* marshalData, int marshalDataType);

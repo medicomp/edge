@@ -39,16 +39,28 @@ NAN_METHOD(initializeClrFunc)
 #endif
 NAN_MODULE_INIT(init)
 {
-    debugMode = HasEnvironmentVariable("EDGE_DEBUG");
-    DBG("edge::init");
+	debugMode = HasEnvironmentVariable("EDGE_DEBUG");
+	DBG("edge::init");
 
-    V8SynchronizationContext::Initialize();
+	V8SynchronizationContext::Initialize();
 
 #ifdef HAVE_CORECLR
-    if (FAILED(CoreClrEmbedding::Initialize(debugMode)))
+	if (HasEnvironmentVariable("EDGE_CORECLR_ALREADY_RUNNING"))
 	{
-		DBG("Error occurred during CoreCLR initialization");
-		return;
+		if (FAILED(CoreClrEmbedding::InitializeAlreadyRunning(debugMode)))
+		{
+			DBG("Error occurred during CoreCLR initialization");
+			return;
+		}
+	}
+
+	else
+	{
+		if (FAILED(CoreClrEmbedding::Initialize(debugMode)))
+		{
+			DBG("Error occurred during CoreCLR initialization");
+			return;
+		}
 	}
 #else
 #ifndef EDGE_PLATFORM_WINDOWS

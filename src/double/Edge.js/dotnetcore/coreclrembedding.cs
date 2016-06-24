@@ -169,19 +169,22 @@ public class CoreCLREmbedding
             DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Packages path is {0}", _packagesPath);
             DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Adding the bootstrap assemblies");
 
-            string[] nameVersionPaths = bootstrapAssemblies.Split(';');
-
-            foreach (string nameVersionPath in nameVersionPaths)
+            if (!String.IsNullOrEmpty(bootstrapAssemblies))
             {
-                string[] pair = nameVersionPath.Split(':');
-                string[] nameVersion = pair[0].Split('/');
+                string[] nameVersionPaths = bootstrapAssemblies.Split(';');
 
-                string name = nameVersion[0];
-                string version = nameVersion[1];
-                string path = Path.Combine(_packagesPath, name, version, pair[1].Replace('/', Path.DirectorySeparatorChar));
+                foreach (string nameVersionPath in nameVersionPaths)
+                {
+                    string[] pair = nameVersionPath.Split(':');
+                    string[] nameVersion = pair[0].Split('/');
 
-                _libraries[name] = path;
-                DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Added bootstrap assembly {0}", path);
+                    string name = nameVersion[0];
+                    string version = nameVersion[1];
+                    string path = Path.Combine(_packagesPath, name, version, pair[1].Replace('/', Path.DirectorySeparatorChar));
+
+                    _libraries[name] = path;
+                    DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Added bootstrap assembly {0}", path);
+                }
             }
 
             DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Finished");
@@ -463,11 +466,14 @@ public class CoreCLREmbedding
             RuntimeEnvironment = new EdgeRuntimeEnvironment(bootstrapperContext);
             LoadContext = new EdgeAssemblyLoadContext(bootstrapperContext.BootstrapAssemblies);
 
-            AssemblyLoadContext.Default.Resolving += Assembly_Resolving;
-
-            if (!String.IsNullOrEmpty(RuntimeEnvironment.DependencyManifestFile))
+            if (Environment.GetEnvironmentVariable("EDGE_CORECLR_ALREADY_RUNNING") != "1")
             {
-                LoadContext.LoadDependencyManifest(RuntimeEnvironment.DependencyManifestFile);
+                AssemblyLoadContext.Default.Resolving += Assembly_Resolving;
+
+                if (!String.IsNullOrEmpty(RuntimeEnvironment.DependencyManifestFile))
+                {
+                    LoadContext.LoadDependencyManifest(RuntimeEnvironment.DependencyManifestFile);
+                }
             }
 
             DebugMessage("CoreCLREmbedding::Initialize (CLR) - Complete");
@@ -505,6 +511,11 @@ public class CoreCLREmbedding
                 }
 
                 assembly = LoadContext.LoadFromFile(assemblyFile);
+            }
+
+            else if (assemblyFile == "EdgeJs")
+            {
+                assembly = typeof(CoreCLREmbedding).GetTypeInfo().Assembly;
             }
 
             else

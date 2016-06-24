@@ -64,8 +64,45 @@ namespace EdgeJs
 #if !NETSTANDARD1_5
         [DllImport("kernel32.dll", EntryPoint = "LoadLibrary")]
         static extern int LoadLibrary([MarshalAs(UnmanagedType.LPStr)] string lpLibFileName);
-#endif
 
+#else
+        public delegate void InitializeDelegate(IntPtr context, IntPtr exception);
+
+        public delegate IntPtr GetFuncDelegate(string assemblyFile, string typeName, string methodName, IntPtr exception);
+
+        public delegate void CallFuncDelegate(IntPtr function, IntPtr payload, int payloadType, IntPtr taskState, IntPtr result, IntPtr resultType);
+
+        public delegate void ContinueTaskDelegate(IntPtr task, IntPtr context, IntPtr callback, IntPtr exception);
+
+        public delegate void FreeHandleDelegate(IntPtr gcHandle);
+
+        public delegate void FreeMarshalDataDelegate(IntPtr marshalData, int v8Type);
+
+        public delegate void SetCallV8FunctionDelegateDelegate(IntPtr callV8Function, IntPtr exception);
+
+        public delegate IntPtr CompileFuncDelegate(IntPtr v8Options, int payloadType, IntPtr exception);
+
+        private static unsafe string GetCallbackPointer<T>(T callback)
+        {
+            IntPtr callbackPointer = Marshal.GetFunctionPointerForDelegate(callback);
+            return ((long) callbackPointer.ToPointer()).ToString();
+        }
+
+        private static void GetCallbackPointers()
+        {
+            string callbackFunctionPointers = GetCallbackPointer<GetFuncDelegate>(CoreCLREmbedding.GetFunc);
+            callbackFunctionPointers += "," + GetCallbackPointer<CallFuncDelegate>(CoreCLREmbedding.CallFunc);
+            callbackFunctionPointers += "," + GetCallbackPointer<ContinueTaskDelegate>(CoreCLREmbedding.ContinueTask);
+            callbackFunctionPointers += "," + GetCallbackPointer<FreeHandleDelegate>(CoreCLREmbedding.FreeHandle);
+            callbackFunctionPointers += "," + GetCallbackPointer<FreeMarshalDataDelegate>(CoreCLREmbedding.FreeMarshalData);
+            callbackFunctionPointers += "," + GetCallbackPointer<SetCallV8FunctionDelegateDelegate>(CoreCLREmbedding.SetCallV8FunctionDelegate);
+            callbackFunctionPointers += "," + GetCallbackPointer<CompileFuncDelegate>(CoreCLREmbedding.CompileFunc);
+            callbackFunctionPointers += "," + GetCallbackPointer<InitializeDelegate>(CoreCLREmbedding.Initialize);
+
+            Environment.SetEnvironmentVariable("EDGE_CALLBACK_FUNCTION_POINTERS", callbackFunctionPointers);
+        }
+#endif
+        
         public static Func<object,Task<object>> Func(string code)
         {
             if (!initialized)
@@ -74,16 +111,18 @@ namespace EdgeJs
                 {
                     if (!initialized)
                     {
-                        string[] nodeParams = String.IsNullOrEmpty(Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS"))
-                            ? new string[0]
-                            : Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS").Split(' ');
+                        List<string> nodeParams = String.IsNullOrEmpty(Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS"))
+                            ? new List<string>()
+                            : new List<string>(Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS").Split(' '));
 
 #if NETSTANDARD1_5
                         Environment.SetEnvironmentVariable("EDGE_USE_CORECLR", "1");
+                        Environment.SetEnvironmentVariable("EDGE_CORECLR_ALREADY_RUNNING", "1");
                         Environment.SetEnvironmentVariable("EDGE_APP_ROOT", AppContext.BaseDirectory);
 
+                        GetCallbackPointers();
+
                         string nativeLibraryPath = Path.Combine(AssemblyDirectory, "..", "..", DependencyContext.Default.RuntimeLibraries.Single(l => l.Name == "Edge.js").NativeLibraryGroups[0].AssetPaths[0].Replace('/', Path.DirectorySeparatorChar));
-                        
                         Environment.SetEnvironmentVariable("EDGE_NATIVE_LIBRARIES_PATH", Path.GetDirectoryName(nativeLibraryPath));
 #else
                         if (IntPtr.Size == 4)
