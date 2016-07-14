@@ -8,7 +8,7 @@ if "%1" equ "" (
 
 mkdir "%SELF%\build\nuget\content\edge" > nul 2>&1
 mkdir "%SELF%\build\nuget\lib\net40" > nul 2>&1
-mkdir "%SELF%\build\nuget\lib\netstandard1.5" > nul 2>&1
+mkdir "%SELF%\build\nuget\lib\netstandard1.6" > nul 2>&1
 mkdir "%SELF%\build\nuget\runtimes\win7-x86\native" > nul 2>&1
 mkdir "%SELF%\build\nuget\runtimes\win7-x64\native" > nul 2>&1
 mkdir "%SELF%\build\nuget\tools" > nul 2>&1
@@ -64,7 +64,7 @@ if %ERRORLEVEL% neq 0 exit /b -1
 
 cd "%SELF%\..\src\double\Edge.js"
 dotnet restore
-dotnet build --configuration Release --framework netstandard1.5
+dotnet build --configuration Release --framework netstandard1.6
 dotnet pack --configuration Release --no-build
 
 if %ERRORLEVEL% neq 0 (
