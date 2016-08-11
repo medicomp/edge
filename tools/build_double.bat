@@ -62,6 +62,14 @@ if %ERRORLEVEL% neq 0 exit /b -1
 csc /out:"%SELF%\..\src\double\Edge.js\bin\Release\net40\EdgeJs.dll" /target:library "%SELF%\..\src\double\Edge.js\dotnet\EdgeJs.cs"
 if %ERRORLEVEL% neq 0 exit /b -1
 
+cd "%SELF%\..\src\double\runtime.win7-x64.Edge.js"
+dotnet restore
+dotnet pack --configuration Release --no-build
+
+cd "%SELF%\..\src\double\runtime.win7-x86.Edge.js"
+dotnet restore
+dotnet pack --configuration Release --no-build
+
 cd "%SELF%\..\src\double\Edge.js"
 dotnet restore
 dotnet build --configuration Release --framework netstandard1.6
@@ -75,6 +83,8 @@ if %ERRORLEVEL% neq 0 (
 
 cd "%SELF%"
 copy /y "%SELF%\..\src\double\Edge.js\bin\Release\*.nupkg" "%SELF%\build\nuget"
+copy /y "%SELF%\..\src\double\runtime.win7-x64.Edge.js\bin\Release\*.nupkg" "%SELF%\build\nuget"
+copy /y "%SELF%\..\src\double\runtime.win7-x86.Edge.js\bin\Release\*.nupkg" "%SELF%\build\nuget"
 echo SUCCESS. Nuget package at %SELF%\build\nuget
 
 exit /b 0

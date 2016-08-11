@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-#if NETSTANDARD1_5
+#if NETSTANDARD1_6
 using System.Linq;
 using Microsoft.Extensions.DependencyModel;
 #endif
@@ -31,7 +31,7 @@ namespace EdgeJs
 
                     if (String.IsNullOrEmpty(assemblyDirectory))
                     {
-#if NETSTANDARD1_5
+#if NETSTANDARD1_6
                         string codeBase = typeof(Edge).GetTypeInfo().Assembly.CodeBase;
 #else
                         string codeBase = typeof(Edge).Assembly.CodeBase;
@@ -61,7 +61,7 @@ namespace EdgeJs
         [DllImport("node", EntryPoint = "Start", CallingConvention = CallingConvention.Cdecl)]
         static extern int NodeStart(int argc, string[] argv);
 
-#if !NETSTANDARD1_5
+#if !NETSTANDARD1_6
         [DllImport("kernel32.dll", EntryPoint = "LoadLibrary")]
         static extern int LoadLibrary([MarshalAs(UnmanagedType.LPStr)] string lpLibFileName);
 
@@ -115,7 +115,7 @@ namespace EdgeJs
                             ? new List<string>()
                             : new List<string>(Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS").Split(' '));
 
-#if NETSTANDARD1_5
+#if NETSTANDARD1_6
                         Environment.SetEnvironmentVariable("EDGE_USE_CORECLR", "1");
                         Environment.SetEnvironmentVariable("EDGE_CORECLR_ALREADY_RUNNING", "1");
                         Environment.SetEnvironmentVariable("EDGE_APP_ROOT", AppContext.BaseDirectory);
