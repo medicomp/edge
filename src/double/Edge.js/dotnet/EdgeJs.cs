@@ -124,26 +124,29 @@ namespace EdgeJs
                         Environment.SetEnvironmentVariable("EDGE_APP_ROOT", AppContext.BaseDirectory);
 
                         GetCallbackPointers();
+#endif
 
-                        string nativeLibraryPath = Path.Combine(AssemblyDirectory, "..", "..", DependencyContext.Default.RuntimeLibraries.Single(l => l.Name == "Edge.js").NativeLibraryGroups[0].AssetPaths[0].Replace('/', Path.DirectorySeparatorChar));
-                        Environment.SetEnvironmentVariable("EDGE_NATIVE_LIBRARIES_PATH", Path.GetDirectoryName(nativeLibraryPath));
-#else
                         if (IntPtr.Size == 4)
                         {
+#if !NETSTANDARD1_6
                             LoadLibrary(AssemblyDirectory + @"\edge\x86\node.dll");
+#endif
                             nodeStart = NodeStartx86;
                         }
+
                         else if (IntPtr.Size == 8)
                         {
+#if !NETSTANDARD1_6
                             LoadLibrary(AssemblyDirectory + @"\edge\x64\node.dll");
+#endif
                             nodeStart = NodeStartx64;
                         }
+
                         else
                         {
                             throw new InvalidOperationException(
                                 "Unsupported architecture. Only x86 and x64 are supported.");
                         }
-#endif
 
                         Thread v8Thread = new Thread(() => 
                         {
