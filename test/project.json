@@ -23,8 +23,10 @@
           "type": "platform",
           "version": "1.0.0"
         },
-        "Edge.js": "6.2.2",
-        "Edge.js.CSharp": "1.0.0"
+        "Edge.js": "6.5.0",
+        "Edge.js.CSharp": "1.2.0",
+        "System.Xml.XmlSerializer": "4.0.11",
+        "System.Xml.ReaderWriter": "4.0.11"
       }
     }
   },
@@ -35,13 +37,5 @@
     "compile": {
       "exclude": ["double/**/*.cs", "hello_class.cs"]
     }
-  },
-
-  "runtimes": {
-    "win7-x64": { },
-    "debian-x64": { },
-    "rhel-x64": { },
-    "ubuntu.14.04-x64": { },
-    "osx.10.10-x64": { }
   }
 }
