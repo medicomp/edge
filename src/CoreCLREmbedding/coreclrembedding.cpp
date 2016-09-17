@@ -246,26 +246,6 @@ HRESULT CoreClrEmbedding::InitializeAlreadyRunning(BOOL debugMode)
 		return E_FAIL;
 	}
 
-	pal::string_t edgeNodePath;
-	std::vector<char> edgeNodePathCstr;
-
-	char tempEdgeNodePath[PATH_MAX];
-
-#ifdef EDGE_PLATFORM_WINDOWS
-	HMODULE moduleHandle = NULL;
-
-	GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)&CoreClrEmbedding::Initialize, &moduleHandle);
-	GetModuleFileName(moduleHandle, tempEdgeNodePath, PATH_MAX);
-#else
-	Dl_info dlInfo;
-
-	dladdr((void*)&CoreClrEmbedding::Initialize, &dlInfo);
-	strcpy(tempEdgeNodePath, dlInfo.dli_fname);
-#endif
-
-	pal::clr_palstring(tempEdgeNodePath, &edgeNodePath);
-	edgeNodePath = get_directory(edgeNodePath);
-
 	pal::string_t edgeAppDir;
 	pal::getenv(_X("EDGE_APP_ROOT"), &edgeAppDir);
 
@@ -274,9 +254,7 @@ HRESULT CoreClrEmbedding::InitializeAlreadyRunning(BOOL debugMode)
 	pal::pal_clrstring(edgeAppDir, &edgeAppDirCstr);
 
 	context.applicationDirectory = edgeAppDirCstr.data();
-	context.edgeNodePath = edgeNodePathCstr.data();
 	context.runtimeDirectory = NULL;
-	context.bootstrapAssemblies = NULL;
 	context.dependencyManifestFile = NULL;
 
 	if (!context.applicationDirectory)

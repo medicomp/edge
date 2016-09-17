@@ -202,14 +202,7 @@ public class CoreCLREmbedding
 
                 _packagesPath = Path.Combine(profileDirectory, ".nuget", "packages");
             }
-
-            DebugMessage("EdgeAssemblyResolver::ctor (CLR) - Packages path is {0}", _packagesPath);
-            DebugMessage("EdgeAssemblyResolver::ctor (CLR) - Adding the bootstrap assemblies");
-                DebugMessage("EdgeAssemblyResolver::ctor (CLR) - Added bootstrap assembly {0}", path);
-            
-            
-        		}
-            }
+        }
 
         public void LoadDependencyManifest(string dependencyManifestFile)
         {
@@ -341,7 +334,7 @@ public class CoreCLREmbedding
                 }
 
                 foreach (string libraryName in supplementaryRuntimeLibraries.Keys)
-                    {
+                {
                     if (!_libraries.ContainsKey(libraryName))
                     {
                         DebugMessage(
@@ -353,7 +346,7 @@ public class CoreCLREmbedding
                     if (!CompileAssemblies.ContainsKey(libraryName))
                     {
                          CompileAssemblies[libraryName] = supplementaryRuntimeLibraries[libraryName];
-                }
+                    }
                 }
 
                 List<string> nativeAssemblies = runtimeLibrary.GetRuntimeNativeAssets(dependencyContext, DotNetRuntimeEnvironment.GetRuntimeIdentifier()).ToList();
@@ -385,32 +378,32 @@ public class CoreCLREmbedding
             }
 
         public string GetNativeLibraryPath(string libraryName)
-            {
+        {
             if (!_nativeLibraries.ContainsKey(libraryName))
-                {
+            {
                 return null;
-                    }
+            }
 
             return _nativeLibraries[libraryName];
-                    }
+        }
 
         internal void AddCompiler(string bootstrapDependencyManifest)
-            {
+        {
             DebugMessage("EdgeAssemblyResolver::AddCompiler (CLR) - Adding the compiler from dependency manifest file {0}", bootstrapDependencyManifest);
 
             DependencyContextJsonReader dependencyContextReader = new DependencyContextJsonReader();
 
             using (FileStream bootstrapDependencyManifestStream = new FileStream(bootstrapDependencyManifest, FileMode.Open, FileAccess.Read))
-        {
+            {
                 DependencyContext compilerDependencyContext = dependencyContextReader.Read(bootstrapDependencyManifestStream);
 
                 DebugMessage("EdgeAssemblyResolver::AddCompiler (CLR) - Adding dependencies for the compiler");
                 AddDependencies(compilerDependencyContext, false);
 
                 DebugMessage("EdgeAssemblyResolver::AddCompiler (CLR) - Finished");
+            }
         }
-            }
-            }
+    }
     
     // ReSharper disable InconsistentNaming
     private static EdgeRuntimeEnvironment RuntimeEnvironment;
@@ -444,7 +437,7 @@ public class CoreCLREmbedding
 
                 if (!String.IsNullOrEmpty(RuntimeEnvironment.DependencyManifestFile))
                 {
-                Resolver.LoadDependencyManifest(RuntimeEnvironment.DependencyManifestFile);
+                    Resolver.LoadDependencyManifest(RuntimeEnvironment.DependencyManifestFile);
                 }
             }
 
@@ -471,8 +464,8 @@ public class CoreCLREmbedding
 
         if (!String.IsNullOrEmpty(Resolver.GetAssemblyPath(arg2.Name)))
         {
-        return LoadContext.LoadFromAssemblyName(arg2);
-    }
+            return LoadContext.LoadFromAssemblyName(arg2);
+        }
 
         DebugMessage("CoreCLREmbedding::Assembly_Resolving (CLR) - Unable to resolve the assembly using the manifest list, returning null");
         return null;
