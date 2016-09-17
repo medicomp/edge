@@ -58,7 +58,7 @@ namespace EdgeJs
         }
 
         [DllImport("node.dll", EntryPoint = "?Start@node@@YAHHQAPAD@Z", CallingConvention = CallingConvention.Cdecl)]
-        static extern int NodeStart(int argc, string[] argv);
+        static extern int NodeStartx86(int argc, string[] argv);
 
         [DllImport("node.dll", EntryPoint = "?Start@node@@YAHHQEAPEAD@Z", CallingConvention = CallingConvention.Cdecl)]
         static extern int NodeStartx64(int argc, string[] argv);
