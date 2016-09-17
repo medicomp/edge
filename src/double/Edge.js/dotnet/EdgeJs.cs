@@ -57,9 +57,12 @@ namespace EdgeJs
             return Task.FromResult((object)null);
         }
 
-        // Find the entry point with `dumpbin /exports node.exe`, look for Start@node
+        [DllImport("node.dll", EntryPoint = "?Start@node@@YAHHQAPAD@Z", CallingConvention = CallingConvention.Cdecl)]
         [DllImport("node", EntryPoint = "Start", CallingConvention = CallingConvention.Cdecl)]
         static extern int NodeStart(int argc, string[] argv);
+
+        [DllImport("node.dll", EntryPoint = "?Start@node@@YAHHQEAPEAD@Z", CallingConvention = CallingConvention.Cdecl)]
+        static extern int NodeStartx64(int argc, string[] argv);
 
 #if !NETSTANDARD1_6
         [DllImport("kernel32.dll", EntryPoint = "LoadLibrary")]
@@ -111,6 +114,7 @@ namespace EdgeJs
                 {
                     if (!initialized)
                     {
+                        Func<int, string[], int> nodeStart;
                         List<string> nodeParams = String.IsNullOrEmpty(Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS"))
                             ? new List<string>()
                             : new List<string>(Environment.GetEnvironmentVariable("EDGE_NODE_PARAMS").Split(' '));
@@ -128,10 +132,12 @@ namespace EdgeJs
                         if (IntPtr.Size == 4)
                         {
                             LoadLibrary(AssemblyDirectory + @"\edge\x86\node.dll");
+                            nodeStart = NodeStartx86;
                         }
                         else if (IntPtr.Size == 8)
                         {
                             LoadLibrary(AssemblyDirectory + @"\edge\x64\node.dll");
+                            nodeStart = NodeStartx64;
                         }
                         else
                         {
@@ -151,7 +157,7 @@ namespace EdgeJs
                             }
 
                             argv.Add(Path.Combine(AssemblyDirectory, "..", "..", "content", "edge", "double_edge.js"));
-                            NodeStart(argv.Count, argv.ToArray());
+                            nodeStart(argv.Count, argv.ToArray());
                             waitHandle.Set();
                         });
 

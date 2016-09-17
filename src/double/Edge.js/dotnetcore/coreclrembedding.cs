@@ -67,12 +67,6 @@ public struct EdgeBootstrapperContext
     public string ApplicationDirectory;
 
     [MarshalAs(UnmanagedType.LPStr)]
-    public string EdgeNodePath;
-
-    [MarshalAs(UnmanagedType.LPStr)]
-    public string BootstrapAssemblies;
-
-    [MarshalAs(UnmanagedType.LPStr)]
     public string DependencyManifestFile;
 }
 
@@ -100,7 +94,6 @@ public class CoreCLREmbedding
         {
             ApplicationDirectory = bootstrapperContext.ApplicationDirectory;
             RuntimePath = bootstrapperContext.RuntimeDirectory;
-            EdgeNodePath = bootstrapperContext.EdgeNodePath;
             DependencyManifestFile = bootstrapperContext.DependencyManifestFile;
         }
 
@@ -110,11 +103,6 @@ public class CoreCLREmbedding
         }
 
         public string ApplicationDirectory
-        {
-            get;
-        }
-
-        public string EdgeNodePath
         {
             get;
         }
@@ -135,17 +123,71 @@ public class CoreCLREmbedding
 
     private class EdgeAssemblyLoadContext : AssemblyLoadContext
     {
+        protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
+        {
+            DebugMessage("EdgeAssemblyLoadContext::LoadUnmanagedDll (CLR) - Trying to resolve {0}", unmanagedDllName);
+
+            string libraryPath = Resolver.GetNativeLibraryPath(unmanagedDllName);
+
+            if (!String.IsNullOrEmpty(libraryPath))
+            {
+                DebugMessage("EdgeAssemblyLoadContext::LoadUnmanagedDll (CLR) - Successfully resolved to {0}", libraryPath);
+                return LoadUnmanagedDllFromPath(libraryPath);
+            }
+
+            else
+            {
+                DebugMessage("EdgeAssemblyLoadContext::LoadUnmanagedDll (CLR) - Unable to resolve to any native library from the dependency manifest");
+                return base.LoadUnmanagedDll(unmanagedDllName);
+            }
+        }
+
+        protected override Assembly Load(AssemblyName assemblyName)
+        {
+            DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Trying to load {0}", assemblyName.Name);
+
+            string assemblyPath = Resolver.GetAssemblyPath(assemblyName.Name);
+
+            if (!String.IsNullOrEmpty(assemblyPath))
+            {
+                try
+                {
+                    DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Trying to load from {0}", assemblyPath);
+                    Assembly assembly = LoadFromAssemblyPath(assemblyPath);
+
+                    if (assembly != null)
+                    {
+                        DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Successfully resolved assembly to {0}", assemblyPath);
+                        return assembly;
+                    }
+                }
+
+                catch (Exception e)
+                {
+                    DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Error trying to load {0}: {1}{2}{3}", assemblyName.Name, e.Message, Environment.NewLine, e.StackTrace);
+
+                    if (e.InnerException != null)
+                    {
+                        DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Inner exception: {0}{1}{2}", e.InnerException.Message, Environment.NewLine, e.InnerException.StackTrace);
+                    }
+                }
+            }
+
+            return null;
+        }
+    }
+
+    private class EdgeAssemblyResolver
+    {
         internal readonly Dictionary<string, string> CompileAssemblies = new Dictionary<string, string>();
-        private bool _noDependencyManifestFile = true;
-        private readonly Dictionary<string, Assembly> _loadedAssemblies = new Dictionary<string, Assembly>();
         private readonly Dictionary<string, string> _libraries = new Dictionary<string, string>();
         private readonly Dictionary<string, string> _nativeLibraries = new Dictionary<string, string>();
         private readonly string _packagesPath;
 
-        public EdgeAssemblyLoadContext(string bootstrapAssemblies)
+        public EdgeAssemblyResolver()
         {
-            DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Starting");
-            DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Getting the packages path");
+            DebugMessage("EdgeAssemblyResolver::ctor (CLR) - Starting");
+            DebugMessage("EdgeAssemblyResolver::ctor (CLR) - Getting the packages path");
 
             _packagesPath = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
 
@@ -161,46 +203,30 @@ public class CoreCLREmbedding
                 _packagesPath = Path.Combine(profileDirectory, ".nuget", "packages");
             }
 
-            DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Packages path is {0}", _packagesPath);
-            DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Adding the bootstrap assemblies");
-
-            if (!String.IsNullOrEmpty(bootstrapAssemblies))
-            {
-                string[] nameVersionPaths = bootstrapAssemblies.Split(';');
-
-                foreach (string nameVersionPath in nameVersionPaths)
-                {
-                    string[] pair = nameVersionPath.Split(':');
-                    string[] nameVersion = pair[0].Split('/');
-
-                    string name = nameVersion[0];
-                    string version = nameVersion[1];
-                    string path = Path.Combine(_packagesPath, name, version, pair[1].Replace('/', Path.DirectorySeparatorChar));
-
-                    _libraries[name] = path;
-                    DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Added bootstrap assembly {0}", path);
-                }
+            DebugMessage("EdgeAssemblyResolver::ctor (CLR) - Packages path is {0}", _packagesPath);
+            DebugMessage("EdgeAssemblyResolver::ctor (CLR) - Adding the bootstrap assemblies");
+                DebugMessage("EdgeAssemblyResolver::ctor (CLR) - Added bootstrap assembly {0}", path);
+            
+            
+        		}
             }
-
-            DebugMessage("EdgeAssemblyLoadContext::ctor (CLR) - Finished");
-        }
 
         public void LoadDependencyManifest(string dependencyManifestFile)
         {
-            DebugMessage("EdgeAssemblyLoadContext::LoadDependencyManifest (CLR) - Loading dependency manifest from {0}", dependencyManifestFile);
+            DebugMessage("EdgeAssemblyResolver::LoadDependencyManifest (CLR) - Loading dependency manifest from {0}", dependencyManifestFile);
             
             DependencyContextJsonReader dependencyContextReader = new DependencyContextJsonReader();
 
             using (FileStream dependencyManifestStream = new FileStream(dependencyManifestFile, FileMode.Open, FileAccess.Read))
             {
-                DebugMessage("EdgeAssemblyLoadContext::LoadDependencyManifest (CLR) - Reading dependency manifest file and merging in dependencies from the shared runtime");
+                DebugMessage("EdgeAssemblyResolver::LoadDependencyManifest (CLR) - Reading dependency manifest file and merging in dependencies from the shared runtime");
                 DependencyContext dependencyContext = dependencyContextReader.Read(dependencyManifestStream);
 
                 string runtimeDependencyManifestFile = (string) AppContext.GetData("FX_DEPS_FILE");
 
                 if (!String.IsNullOrEmpty(runtimeDependencyManifestFile) && runtimeDependencyManifestFile != dependencyManifestFile)
                 {
-                    DebugMessage("EdgeAssemblyLoadContext::LoadDependencyManifest (CLR) - Merging in the dependency manifest from the shared runtime at {0}", runtimeDependencyManifestFile);
+                    DebugMessage("EdgeAssemblyResolver::LoadDependencyManifest (CLR) - Merging in the dependency manifest from the shared runtime at {0}", runtimeDependencyManifestFile);
 
                     using (FileStream runtimeDependencyManifestStream = new FileStream(runtimeDependencyManifestFile, FileMode.Open, FileAccess.Read))
                     {
@@ -211,13 +237,11 @@ public class CoreCLREmbedding
                 AddDependencies(dependencyContext, RuntimeEnvironment.StandaloneApplication);
             }
 
-            _noDependencyManifestFile = false;
-
             string entryAssemblyPath = dependencyManifestFile.Replace(".deps.json", ".dll");
 
             if (File.Exists(entryAssemblyPath))
             {
-                Assembly entryAssembly = LoadFromAssemblyName(new AssemblyName(Path.GetFileNameWithoutExtension(entryAssemblyPath)));
+                Assembly entryAssembly = Assembly.Load(new AssemblyName(Path.GetFileNameWithoutExtension(entryAssemblyPath)));
                 Lazy<DependencyContext> defaultDependencyContext = new Lazy<DependencyContext>(() => DependencyContext.Load(entryAssembly));
 
                 // I really don't like doing it this way, but it's the easiest way to give the running code access to the default 
@@ -225,12 +249,12 @@ public class CoreCLREmbedding
                 typeof(DependencyContext).GetField("_defaultContext", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, defaultDependencyContext);
             }
 
-            DebugMessage("EdgeAssemblyLoadContext::LoadDependencyManifest (CLR) - Finished");
+            DebugMessage("EdgeAssemblyResolver::LoadDependencyManifest (CLR) - Finished");
         }
 
         private void AddDependencies(DependencyContext dependencyContext, bool standalone)
         {
-            DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Adding dependencies for {0}", dependencyContext.Target.Framework);
+            DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Adding dependencies for {0}", dependencyContext.Target.Framework);
 
             foreach (CompilationLibrary compileLibrary in dependencyContext.CompileLibraries)
             {
@@ -239,7 +263,7 @@ public class CoreCLREmbedding
                     continue;
                 }
 
-                DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Processing compile dependency {0}", compileLibrary.Name);
+                DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Processing compile dependency {0}", compileLibrary.Name);
 
                 string assemblyPath = standalone && File.Exists(Path.Combine(RuntimeEnvironment.ApplicationDirectory, "refs", Path.GetFileName(compileLibrary.Assemblies[0].Replace('/', Path.DirectorySeparatorChar))))
                     ? Path.Combine(RuntimeEnvironment.ApplicationDirectory, "refs", Path.GetFileName(compileLibrary.Assemblies[0].Replace('/', Path.DirectorySeparatorChar)))
@@ -250,19 +274,21 @@ public class CoreCLREmbedding
                     if (File.Exists(assemblyPath))
                     {
                         CompileAssemblies[compileLibrary.Name] = assemblyPath;
-                        DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Added compile assembly {0}", assemblyPath);
+                        DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Added compile assembly {0}", assemblyPath);
                     }
                 }
 
                 else
                 {
-                    DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Already present in the compile assemblies list, skipping");
+                    DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Already present in the compile assemblies list, skipping");
                 }
             }
 
+            Dictionary<string, string> supplementaryRuntimeLibraries = new Dictionary<string, string>();
+
             foreach (RuntimeLibrary runtimeLibrary in dependencyContext.RuntimeLibraries)
             {
-                DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Processing runtime dependency {1} {0}", runtimeLibrary.Name, runtimeLibrary.Type);
+                DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Processing runtime dependency {1} {0}", runtimeLibrary.Name, runtimeLibrary.Type);
 
                 List<string> assets = runtimeLibrary.RuntimeAssemblyGroups.GetRuntimeAssets(DotNetRuntimeEnvironment.GetRuntimeIdentifier()).ToList();
 
@@ -281,56 +307,66 @@ public class CoreCLREmbedding
                             : Path.Combine(_packagesPath, runtimeLibrary.Name, runtimeLibrary.Version, assetPath.Replace('/', Path.DirectorySeparatorChar));
                     string libraryNameFromPath = Path.GetFileNameWithoutExtension(assemblyPath);
 
+                    if (!File.Exists(assemblyPath))
+                    {
+                        assemblyPath = Path.Combine(RuntimeEnvironment.RuntimePath, Path.GetFileName(assemblyPath));
+                    }
+
                     if (!_libraries.ContainsKey(runtimeLibrary.Name))
                     {
                         _libraries[runtimeLibrary.Name] = assemblyPath;
-                        DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Added runtime assembly {0}", assemblyPath);
+                        DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Added runtime assembly {0}", assemblyPath);
                     }
 
                     else
                     {
-                        DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Already present in the runtime assemblies list, skipping");
+                        DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Already present in the runtime assemblies list, skipping");
                     }
 
                     if (runtimeLibrary.Name != libraryNameFromPath && !_libraries.ContainsKey(libraryNameFromPath))
                     {
-                        _libraries[libraryNameFromPath] = assemblyPath;
-                        DebugMessage(
-                            "EdgeAssemblyLoadContext::AddDependencies (CLR) - Filename in the dependency context did not match the package/project name, added additional resolver for {0}",
-                            libraryNameFromPath);
+                        supplementaryRuntimeLibraries[libraryNameFromPath] = assemblyPath;
                     }
 
                     if (!CompileAssemblies.ContainsKey(runtimeLibrary.Name))
                     {
                         CompileAssemblies[runtimeLibrary.Name] = assemblyPath;
-                        DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Added compile assembly {0}", assemblyPath);
+                        DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Added compile assembly {0}", assemblyPath);
                     }
 
                     else
                     {
-                        DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Already present in the compile assemblies list, skipping");
+                        DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Already present in the compile assemblies list, skipping");
+                    }
+                }
+
+                foreach (string libraryName in supplementaryRuntimeLibraries.Keys)
+                    {
+                    if (!_libraries.ContainsKey(libraryName))
+                    {
+                        DebugMessage(
+                            "EdgeAssemblyResolver::AddDependencies (CLR) - Filename in the dependency context did not match the package/project name, added additional resolver for {0}",
+                            libraryName);
+                        _libraries[libraryName] = supplementaryRuntimeLibraries[libraryName];
                     }
 
-                    if (runtimeLibrary.Name != libraryNameFromPath && !CompileAssemblies.ContainsKey(libraryNameFromPath))
+                    if (!CompileAssemblies.ContainsKey(libraryName))
                     {
-                        CompileAssemblies[libraryNameFromPath] = assemblyPath;
-                        DebugMessage(
-                            "EdgeAssemblyLoadContext::AddCompileDependencies (CLR) - Filename in the dependency context did not match the package/project name, added additional resolver for {0}",
-                            libraryNameFromPath);
-                    }
+                         CompileAssemblies[libraryName] = supplementaryRuntimeLibraries[libraryName];
+                }
                 }
 
                 List<string> nativeAssemblies = runtimeLibrary.GetRuntimeNativeAssets(dependencyContext, DotNetRuntimeEnvironment.GetRuntimeIdentifier()).ToList();
 
                 if (nativeAssemblies.Any())
                 {
-                    DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Adding native dependencies for {0}", DotNetRuntimeEnvironment.GetRuntimeIdentifier());
+                    DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Adding native dependencies for {0}", DotNetRuntimeEnvironment.GetRuntimeIdentifier());
 
                     foreach (string nativeAssembly in nativeAssemblies)
                     {
                         string nativeAssemblyPath = Path.Combine(_packagesPath, runtimeLibrary.Name, runtimeLibrary.Version, nativeAssembly.Replace('/', Path.DirectorySeparatorChar));
 
-                        DebugMessage("EdgeAssemblyLoadContext::AddDependencies (CLR) - Adding native assembly {0} at {1}",
+                        DebugMessage("EdgeAssemblyResolver::AddDependencies (CLR) - Adding native assembly {0} at {1}",
                             Path.GetFileNameWithoutExtension(nativeAssembly), nativeAssemblyPath);
                         _nativeLibraries[Path.GetFileNameWithoutExtension(nativeAssembly)] = nativeAssemblyPath;
                     }
@@ -338,122 +374,48 @@ public class CoreCLREmbedding
             }
         }
 
-        internal string GetAssemblyPath(string assemblyName)
+        public string GetAssemblyPath(string assemblyName)
         {
+            if (!_libraries.ContainsKey(assemblyName))
+        {
+                return null;
+            }
+
             return _libraries[assemblyName];
-        }
+            }
+
+        public string GetNativeLibraryPath(string libraryName)
+            {
+            if (!_nativeLibraries.ContainsKey(libraryName))
+                {
+                return null;
+                    }
+
+            return _nativeLibraries[libraryName];
+                    }
 
         internal void AddCompiler(string bootstrapDependencyManifest)
-        {
-            DebugMessage("EdgeAssemblyLoadContext::AddCompiler (CLR) - Adding the compiler from dependency manifest file {0}", bootstrapDependencyManifest);
+            {
+            DebugMessage("EdgeAssemblyResolver::AddCompiler (CLR) - Adding the compiler from dependency manifest file {0}", bootstrapDependencyManifest);
 
             DependencyContextJsonReader dependencyContextReader = new DependencyContextJsonReader();
 
             using (FileStream bootstrapDependencyManifestStream = new FileStream(bootstrapDependencyManifest, FileMode.Open, FileAccess.Read))
-            {
+        {
                 DependencyContext compilerDependencyContext = dependencyContextReader.Read(bootstrapDependencyManifestStream);
 
-                DebugMessage("EdgeAssemblyLoadContext::AddCompiler (CLR) - Adding dependencies for the compiler");
+                DebugMessage("EdgeAssemblyResolver::AddCompiler (CLR) - Adding dependencies for the compiler");
                 AddDependencies(compilerDependencyContext, false);
 
-                DebugMessage("EdgeAssemblyLoadContext::AddCompiler (CLR) - Finished");
-            }
+                DebugMessage("EdgeAssemblyResolver::AddCompiler (CLR) - Finished");
         }
-
-        protected override Assembly Load(AssemblyName assemblyName)
-        {
-            DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Trying to load {0}", assemblyName.Name);
-
-            if (_loadedAssemblies.ContainsKey(assemblyName.Name))
-            {
-                DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Returning previously loaded assembly");
-                return _loadedAssemblies[assemblyName.Name];
             }
-
-            if (_libraries.ContainsKey(assemblyName.Name))
-            {
-                try
-                {
-                    DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Trying to load from {0}", _libraries[assemblyName.Name]);
-                    Assembly assembly = LoadFromAssemblyPath(_libraries[assemblyName.Name]);
-
-                    if (assembly != null)
-                    {
-                        DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Successfully resolved assembly to {0}", _libraries[assemblyName.Name]);
-                        _loadedAssemblies[assemblyName.Name] = assembly;
-
-                        return assembly;
-                    }
-                }
-
-                catch (Exception e)
-                {
-                    DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Error trying to load {0}: {1}{2}{3}", assemblyName.Name, e.Message, Environment.NewLine, e.StackTrace);
-
-                    if (e.InnerException != null)
-                    {
-                        DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Inner exception: {0}{1}{2}", e.InnerException.Message, Environment.NewLine, e.InnerException.StackTrace);
-                    }
-
-                    throw;
-                }
             }
-
-            DebugMessage("EdgeAssemblyLoadContext::Load (CLR) - Unable to resolve assembly from manifest list");
-
-            if (_noDependencyManifestFile)
-            {
-                throw new Exception(
-                    String.Format(
-                        "Could not load file or assembly '{0}'.  You will need to create a project.json file that includes this dependency, run 'dotnet build' to generate a .deps.json file, and then specify the output directory from the build process using the EDGE_APP_ROOT environment variable.",
-                        assemblyName.Name));
-            }
-
-            else
-            {
-                throw new Exception(
-                    String.Format(
-                        "Could not load file or assembly '{0}'.  You will need to add a reference to this package to your project.json.",
-                        assemblyName.Name));
-            }
-        }
-
-        public Assembly LoadFromFile(string assemblyPath)
-        {
-            if (!Path.IsPathRooted(assemblyPath))
-            {
-                assemblyPath = Path.Combine(RuntimeEnvironment.ApplicationDirectory, assemblyPath);
-            }
-
-            if (!File.Exists(assemblyPath))
-            {
-                throw new FileNotFoundException("Assembly file not found.", assemblyPath);
-            }
-
-            return LoadFromAssemblyPath(assemblyPath);
-        }
-
-        protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
-        {
-            DebugMessage("EdgeAssemblyLoadContext::LoadUnmanagedDll (CLR) - Trying to resolve {0}", unmanagedDllName);
-
-            if (_nativeLibraries.ContainsKey(unmanagedDllName))
-            {
-                DebugMessage("EdgeAssemblyLoadContext::LoadUnmanagedDll (CLR) - Successfully resolved to {0}", _nativeLibraries[unmanagedDllName]);
-                return LoadUnmanagedDllFromPath(_nativeLibraries[unmanagedDllName]);
-            }
-
-            else
-            {
-                DebugMessage("EdgeAssemblyLoadContext::LoadUnmanagedDll (CLR) - Unable to resolve to any native library from the dependency manifest");
-                return base.LoadUnmanagedDll(unmanagedDllName);
-            }
-        }
-    }
     
     // ReSharper disable InconsistentNaming
     private static EdgeRuntimeEnvironment RuntimeEnvironment;
-    private static EdgeAssemblyLoadContext LoadContext;
+    private static EdgeAssemblyResolver Resolver;
+    private static AssemblyLoadContext LoadContext = new EdgeAssemblyLoadContext();
     // ReSharper enable InconsistentNaming
 
     private static readonly bool DebugMode = Environment.GetEnvironmentVariable("EDGE_DEBUG") == "1";
@@ -474,21 +436,15 @@ public class CoreCLREmbedding
             EdgeBootstrapperContext bootstrapperContext = Marshal.PtrToStructure<EdgeBootstrapperContext>(context);
 
             RuntimeEnvironment = new EdgeRuntimeEnvironment(bootstrapperContext);
-            LoadContext = new EdgeAssemblyLoadContext(bootstrapperContext.BootstrapAssemblies);
+            Resolver = new EdgeAssemblyResolver();
 
             if (Environment.GetEnvironmentVariable("EDGE_CORECLR_ALREADY_RUNNING") != "1")
             {
                 AssemblyLoadContext.Default.Resolving += Assembly_Resolving;
 
-            // If we don't pre-load these assemblies prior to calling LoadDependencyManifest, an EngineExecutionException is
-            // thrown during the assembly resolution process (no idea why)
-            AssemblyLoadContext.Default.LoadFromAssemblyPath(LoadContext.GetAssemblyPath("Microsoft.Extensions.DependencyModel"));
-            AssemblyLoadContext.Default.LoadFromAssemblyPath(LoadContext.GetAssemblyPath("Newtonsoft.Json"));
-            AssemblyLoadContext.Default.LoadFromAssemblyPath(LoadContext.GetAssemblyPath("Microsoft.DotNet.InternalAbstractions"));
-
                 if (!String.IsNullOrEmpty(RuntimeEnvironment.DependencyManifestFile))
                 {
-                    LoadContext.LoadDependencyManifest(RuntimeEnvironment.DependencyManifestFile);
+                Resolver.LoadDependencyManifest(RuntimeEnvironment.DependencyManifestFile);
                 }
             }
 
@@ -506,8 +462,20 @@ public class CoreCLREmbedding
 
     private static Assembly Assembly_Resolving(AssemblyLoadContext arg1, AssemblyName arg2)
     {
-        DebugMessage("CoreCLREmbedding::Initialize (CLR) - Starting resolve process for {0}", arg2.Name);
+        if (arg2.Name == "System.Core")
+        {
+            return null;
+        }
+
+        DebugMessage("CoreCLREmbedding::Assembly_Resolving (CLR) - Starting resolve process for {0}", arg2.Name);
+
+        if (!String.IsNullOrEmpty(Resolver.GetAssemblyPath(arg2.Name)))
+        {
         return LoadContext.LoadFromAssemblyName(arg2);
+    }
+
+        DebugMessage("CoreCLREmbedding::Assembly_Resolving (CLR) - Unable to resolve the assembly using the manifest list, returning null");
+        return null;
     }
 
     [SecurityCritical]
@@ -526,7 +494,7 @@ public class CoreCLREmbedding
                     assemblyFile = Path.Combine(Directory.GetCurrentDirectory(), assemblyFile);
                 }
 
-                assembly = LoadContext.LoadFromFile(assemblyFile);
+                assembly = LoadContext.LoadFromAssemblyPath(assemblyFile);
             }
 
             else if (assemblyFile == "EdgeJs")
@@ -536,7 +504,7 @@ public class CoreCLREmbedding
 
             else
             {
-                assembly = AssemblyLoadContext.Default.LoadFromAssemblyName(new AssemblyName(assemblyFile));
+                assembly = Assembly.Load(new AssemblyName(assemblyFile));
             }
 
             DebugMessage("CoreCLREmbedding::GetFunc (CLR) - Assembly {0} loaded successfully", assemblyFile);
@@ -585,10 +553,10 @@ public class CoreCLREmbedding
                                 "Compiler package {0} was not found in the application dependency manifest and no bootstrap dependency manifest was found for the compiler.  Make sure that you either have {0} in your project.json or, if you do not have a project.json, that you have the .NET Core SDK installed.", compiler));
                     }
 
-                    LoadContext.AddCompiler(options["bootstrapDependencyManifest"].ToString());
+                    Resolver.AddCompiler(options["bootstrapDependencyManifest"].ToString());
                 }
                 
-                Assembly compilerAssembly = AssemblyLoadContext.Default.LoadFromAssemblyName(new AssemblyName(compiler));
+                Assembly compilerAssembly = Assembly.Load(new AssemblyName(compiler));
                 DebugMessage("CoreCLREmbedding::CompileFunc (CLR) - Compiler assembly {0} loaded successfully", compiler);
 
                 compilerType = compilerAssembly.GetType("EdgeCompiler");
@@ -609,7 +577,7 @@ public class CoreCLREmbedding
 
                 setAssemblyLoader?.Invoke(null, new object[]
                 {
-                    new Func<Stream, Assembly>(assemblyStream => LoadContext.LoadFromStream(assemblyStream, null))
+                    new Func<Stream, Assembly>(assemblyStream => AssemblyLoadContext.Default.LoadFromStream(assemblyStream, null))
                 });
 
                 Compilers[compiler] = new Tuple<Type, MethodInfo>(compilerType, compileMethod);
@@ -627,7 +595,7 @@ public class CoreCLREmbedding
             Func<object, Task<object>> compiledFunction = (Func<object, Task<object>>)compileMethod.Invoke(compilerInstance, new object[]
             {
                 options,
-                LoadContext.CompileAssemblies
+                Resolver.CompileAssemblies
             });
             DebugMessage("CoreCLREmbedding::CompileFunc (CLR) - Compilation complete");
 
